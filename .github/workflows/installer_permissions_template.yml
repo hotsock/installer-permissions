@@ -1,0 +1,30 @@
+name: Installer Permissions Template
+on:
+  push:
+    branches: [main]
+jobs:
+  publish:
+    name: ${{ matrix.region }}
+    strategy:
+      matrix:
+        include:
+          - region: us-west-2
+            aws-account-id: "080825576347"
+            aws-partition: aws
+          - region: us-gov-west-1
+            aws-account-id: "282774566237"
+            aws-partition: aws-us-gov
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:${{ matrix.aws-partition }}:iam::${{ matrix.aws-account-id }}:role/GitHubActionsHotsockInstallerPermissionsTemplatesRole
+          aws-region: ${{ matrix.region }}
+      - uses: actions/checkout@v4
+      - run: |
+          aws s3 cp \
+            installer-permissions.yml \
+            s3://hotsock-stack-templates-${{ matrix.region }}/installer-permissions.yml

@@ -1,0 +1,13 @@
+Resources:
+  Key:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Test ABAC Key
+      EnableKeyRotation: false
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      Tags:
+        - Key: hotsock:service
+          Value: Hotsock
+        - Key: any:other:tag
+          Value: ok

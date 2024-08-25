@@ -1,0 +1,366 @@
+Conditions:
+  PartitionIsUSGovCloud: !Equals [!Ref AWS::Partition, aws-us-gov]
+Resources:
+  InstallerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: HotsockInstallerRole
+      Path: /hotsock/
+      Description: Allows CloudFormation to manage Hotsock installations with appropriate permissions.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - !Sub cloudformation.${AWS::URLSuffix}
+      ManagedPolicyArns:
+        - !Ref MaximumPermissionsPolicy
+        - !Ref IAMPermissionsPolicy
+      Tags:
+        - Key: hotsock:service
+          Value: Hotsock
+  SupportRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: HotsockSupportRole
+      Path: /hotsock/
+      Description: Allows Hotsock support staff to access your account to triage issues upon your request. Access is denied by default with an expired date condition in the assume role trust relationship, which must be set to a date in the future to grant access.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              AWS:
+                !If [
+                  PartitionIsUSGovCloud,
+                  arn:aws-us-gov:iam::282774566237:root,
+                  arn:aws:iam::080825576347:root,
+                ]
+            Condition:
+              DateLessThanEquals:
+                aws:CurrentTime: "2024-01-01T00:00:00Z"
+      ManagedPolicyArns:
+        - !Ref MaximumPermissionsPolicy
+        - !Ref IAMPermissionsPolicy
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess
+      Tags:
+        - Key: hotsock:service
+          Value: Hotsock
+  LicensingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: HotsockLicensingRole
+      Path: /hotsock/
+      Description: Allows Hotsock to perform licensing operations and collect usage data for installation metering.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              AWS:
+                !If [
+                  PartitionIsUSGovCloud,
+                  arn:aws-us-gov:iam::282774566237:root,
+                  arn:aws:iam::080825576347:root,
+                ]
+      PermissionsBoundary: !Ref MaximumPermissionsPolicy
+      Policies:
+        - PolicyName: DescribeOrganization
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: organizations:DescribeOrganization
+                Resource: "*"
+        - PolicyName: CloudWatchApiGatewayMetrics
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:GetMetricWidgetImage
+                Resource: "*"
+        - PolicyName: CloudWatchPutMetricData
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: cloudwatch:PutMetricData
+                Resource: "*"
+                Condition:
+                  StringLike:
+                    cloudwatch:namespace: Hotsock/*
+        - PolicyName: LicensingABAC
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/hotsock:licensing: Allow
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/hotsock/*
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/hotsock:licensing: Allow
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:BatchGetItem
+                  - dynamodb:ConditionCheckItem
+                Resource: "*"
+                Condition:
+                  ForAllValues:StringEquals:
+                    dynamodb:LeadingKeys:
+                      - installation
+                      - licensing
+                  StringEquals:
+                    aws:ResourceTag/hotsock:service: Hotsock
+      Tags:
+        - Key: hotsock:service
+          Value: Hotsock
+  IAMPermissionsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Grants limited IAM access to Hotsock installer and support roles with path and Permissions Boundary requirement
+      ManagedPolicyName: HotsockIAMPermissions
+      Path: /hotsock/
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - iam:GenerateCredentialReport
+              - iam:GenerateServiceLastAccessedDetails
+              - iam:Get*
+              - iam:List*
+              - iam:SimulateCustomPolicy
+              - iam:SimulatePrincipalPolicy
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicy
+              - iam:DeletePolicyVerion
+              - iam:DeleteRole
+              - iam:DeleteRolePolicy
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:PutRolePolicy
+              - iam:SetDefaultPolicyVersion
+              - iam:TagRole
+              - iam:TagPolicy
+              - iam:UntagRole
+              - iam:UntagPolicy
+              - iam:UpdateAssumeRolePolicy
+              - iam:UpdateRole
+              - iam:UpdateRoleDescription
+              - iam:PassRole
+            Resource:
+              - !Sub arn:${AWS::Partition}:iam::*:role/hotsock/*
+              - !Sub arn:${AWS::Partition}:iam::*:policy/hotsock/*
+          - Effect: Allow
+            Action:
+              - iam:CreateRole
+              - iam:PutRolePermissionsBoundary
+            Resource: !Sub arn:${AWS::Partition}:iam::*:role/hotsock/*
+            Condition:
+              StringEquals:
+                iam:PermissionsBoundary: !Ref MaximumPermissionsPolicy
+          - Effect: Deny
+            Action: iam:DeleteRolePermissionsBoundary
+            Resource: "*"
+            Condition:
+              StringEquals:
+                iam:PermissionsBoundary: !Ref MaximumPermissionsPolicy
+          - Effect: Deny
+            Action:
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:SetDefaultPolicyVersion
+            Resource: !Ref MaximumPermissionsPolicy
+  MaximumPermissionsPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Grants maximum permissions needed for Hotsock
+      ManagedPolicyName: HotsockMaximumPermissions
+      Path: /hotsock/
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowServicesWildcards
+            Effect: Allow
+            Action:
+              - apigateway:*
+              - appconfig:*
+              - application-autoscaling:*
+              - applicationinsights:*
+              - athena:*
+              - autoscaling:*
+              - cloudformation:*
+              - cloudfront:*
+              - cloudfront-keyvaluestore:*
+              - cloudwatch:*
+              - dax:*
+              - dynamodb:*
+              - ec2:*
+              - ec2messages:*
+              - ecr:*
+              - ecr-public:*
+              - ecs:*
+              - elasticache:*
+              - elasticfilesystem:*
+              - elasticloadbalancing:*
+              - events:*
+              - evidently:*
+              - execute-api:*
+              - firehose:*
+              - health:*
+              - kinesis:*
+              - lambda:*
+              - logs:*
+              - memorydb:*
+              - pipes:*
+              - s3:*
+              - s3-object-lambda:*
+              - scheduler:*
+              - schemas:*
+              - serverlessrepo:*
+              - sns:*
+              - sqs:*
+              - ssm:*
+              - states:*
+              - sts:*
+              - tag:*
+              - vpc-lattice:*
+              - vpc-lattice-svcs:*
+              - wafv2:*
+              - xray:*
+            Resource: "*"
+          - Sid: DenyReservationPurchases
+            Effect: Deny
+            Action:
+              - dynamodb:PurchaseReservedCapacityOfferings
+              - ec2:*Reserved*
+              - ec2:*Reservation*
+              - ec2:Purchase*
+              - ec2:RunInstances
+              - elasticache:PurchaseReservedCacheNodesOffering
+              - es:PurchaseReserved*
+              - memorydb:PurchaseReservedNodesOffering
+              - rds:PurchaseReservedDBInstancesOffering
+              - redshift:AcceptReservedNodeExchange
+              - redshift:PurchaseReservedNodeOffering
+              - savingsplans:*
+            Resource: "*"
+          - Sid: AllowOrgInfo
+            Effect: Allow
+            Action: organizations:DescribeOrganization
+            Resource: "*"
+          - Sid: AllowKMSReadOnlyActions
+            Effect: Allow
+            Action:
+              - kms:DescribeKey
+              - kms:GenerateRandom
+              - kms:List*
+            Resource: "*"
+          - Sid: AllowKMSTaggedKeyManagement
+            Effect: Allow
+            Action:
+              - kms:CancelKeyDeletion
+              - kms:CreateGrant
+              - kms:Decrypt
+              - kms:DeriveSharedSecret
+              - kms:Disable*
+              - kms:Enable*
+              - kms:Encrypt
+              - kms:Generate*
+              - kms:Get*
+              - kms:Put*
+              - kms:ReEncrypt*
+              - kms:ReplicateKey
+              - kms:RetireGrant
+              - kms:RevokeGrant
+              - kms:RotateKeyOnDemand
+              - kms:ScheduleKeyDeletion
+              - kms:Sign
+              - kms:SynchronizeMultiRegionKey
+              - kms:UpdateKeyDescription
+              - kms:UpdatePrimaryRegion
+              - kms:Verify*
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:ResourceTag/hotsock:service: Hotsock
+          - Sid: AllowKMSTaggedKeyCreation
+            Effect: Allow
+            Action:
+              - kms:CreateKey
+              - kms:TagResource
+            Resource: "*"
+            Condition:
+              ForAnyValue:StringEquals:
+                aws:RequestTag/hotsock:service: Hotsock
+          - Sid: AllowKMSKeyTaggingOfOwnKeysWithOtherTags
+            Effect: Allow
+            Action: kms:TagResource
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:ResourceTag/hotsock:service: Hotsock
+          - Sid: AllowUntaggingOfOwnKeysWithOtherTags
+            Effect: Allow
+            Action: kms:UntagResource
+            Resource: "*"
+            Condition:
+              StringEquals:
+                aws:ResourceTag/hotsock:service: Hotsock
+              ForAnyValue:StringNotEquals:
+                aws:TagKeys: [hotsock:service]
+          - Sid: DenyKMSKeyTaggingInvalidTagValue
+            Effect: Deny
+            Action: kms:TagResource
+            Resource: "*"
+            Condition:
+              StringNotEquals:
+                aws:ResourceTag/hotsock:service: Hotsock
+          - Sid: DenyKMSKeyTaggingInvalidChangeValue
+            Effect: Deny
+            Action: kms:TagResource
+            Resource: "*"
+            Condition:
+              ForAnyValue:StringNotEquals:
+                aws:RequestTag/hotsock:service: Hotsock
+          - Sid: DenyKMSKeyTaggingMissingTag
+            Effect: Deny
+            Action: kms:TagResource
+            Resource: "*"
+            Condition:
+              "Null":
+                aws:ResourceTag/hotsock:service: true
+Mappings:
+  MetaMap:
+    Global:
+      Version: "1.0"
+Outputs:
+  Version:
+    Value: !FindInMap [MetaMap, Global, Version]
