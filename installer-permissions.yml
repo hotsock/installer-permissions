@@ -272,6 +272,10 @@ Resources:
               - redshift:PurchaseReservedNodeOffering
               - savingsplans:*
             Resource: "*"
+          - Sid: AllowPassingRoles
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !Sub arn:${AWS::Partition}:iam::*:role/hotsock/*
           - Sid: AllowOrgInfo
             Effect: Allow
             Action: organizations:DescribeOrganization
