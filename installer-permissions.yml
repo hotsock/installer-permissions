@@ -221,6 +221,7 @@ Resources:
               - cloudfront-keyvaluestore:*
               - cloudwatch:*
               - dax:*
+              - dsql:*
               - dynamodb:*
               - ec2:*
               - ec2messages:*
