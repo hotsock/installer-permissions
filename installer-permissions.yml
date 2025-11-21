@@ -278,6 +278,12 @@ Resources:
             Effect: Allow
             Action: iam:PassRole
             Resource: !Sub arn:${AWS::Partition}:iam::*:role/hotsock/*
+          - Sid: AllowOutboundWebIdentityFederation
+            Effect: Allow
+            Action:
+              - iam:EnableOutboundWebIdentityFederation
+              - iam:GetOutboundWebIdentityFederationInfo
+            Resource: "*"
           - Sid: AllowOrgInfo
             Effect: Allow
             Action: organizations:DescribeOrganization
