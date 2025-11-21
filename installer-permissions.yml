@@ -147,6 +147,7 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
+              - iam:EnableOutboundWebIdentityFederation
               - iam:GenerateCredentialReport
               - iam:GenerateServiceLastAccessedDetails
               - iam:Get*
