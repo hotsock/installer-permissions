@@ -109,7 +109,6 @@ Resources:
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
-                  - ssm:PutParameter
                 Resource:
                   - !Sub arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/hotsock/*
                 Condition:
