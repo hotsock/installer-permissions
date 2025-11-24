@@ -109,11 +109,9 @@ Resources:
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
+                  - ssm:PutParameter
                 Resource:
-                  - !Sub arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/hotsock/*
-                Condition:
-                  StringEquals:
-                    aws:ResourceTag/hotsock:licensing: Allow
+                  - !Sub arn:${AWS::Partition}:ssm:*:${AWS::AccountId}:parameter/hotsock/licensing/*
               - Effect: Allow
                 Action:
                   - dynamodb:GetItem
