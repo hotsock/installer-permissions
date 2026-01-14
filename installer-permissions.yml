@@ -275,6 +275,10 @@ Resources:
             Effect: Allow
             Action: iam:PassRole
             Resource: !Sub arn:${AWS::Partition}:iam::*:role/hotsock/*
+          - Sid: AllowCreatingServiceLinkedRoles
+            Effect: Allow
+            Action: iam:CreateServiceLinkedRole
+            Resource: "*"
           - Sid: AllowOutboundWebIdentityFederation
             Effect: Allow
             Action:
