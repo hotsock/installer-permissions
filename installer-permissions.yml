@@ -159,10 +159,6 @@ Resources:
               - iam:DeletePolicy
               - iam:DeletePolicyVersion
               - iam:DeleteRole
-              - iam:DeleteRolePolicy
-              - iam:AttachRolePolicy
-              - iam:DetachRolePolicy
-              - iam:PutRolePolicy
               - iam:SetDefaultPolicyVersion
               - iam:TagRole
               - iam:TagPolicy
@@ -175,10 +171,18 @@ Resources:
             Resource:
               - !Sub arn:${AWS::Partition}:iam::*:role/hotsock/*
               - !Sub arn:${AWS::Partition}:iam::*:policy/hotsock/*
+          # Roles can only be created with the permissions boundary, and the
+          # permissions of a role can only be changed while it has the boundary.
+          # A role without it (like HotsockInstallerRole and HotsockSupportRole)
+          # would get the full, unbounded effect of any policy added to it.
           - Effect: Allow
             Action:
+              - iam:AttachRolePolicy
               - iam:CreateRole
+              - iam:DeleteRolePolicy
+              - iam:DetachRolePolicy
               - iam:PutRolePermissionsBoundary
+              - iam:PutRolePolicy
             Resource: !Sub arn:${AWS::Partition}:iam::*:role/hotsock/*
             Condition:
               StringEquals:
@@ -189,13 +193,38 @@ Resources:
             Condition:
               StringEquals:
                 iam:PermissionsBoundary: !Ref MaximumPermissionsPolicy
+          # The roles and policies in this template are managed only by whoever
+          # deploys this stack. The roles they are attached to can never change
+          # their own permissions, who can assume them, or the boundary itself.
+          - Effect: Deny
+            Action:
+              - iam:AttachRolePolicy
+              - iam:DeleteRole
+              - iam:DeleteRolePermissionsBoundary
+              - iam:DeleteRolePolicy
+              - iam:DetachRolePolicy
+              - iam:PutRolePermissionsBoundary
+              - iam:PutRolePolicy
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:UpdateAssumeRolePolicy
+              - iam:UpdateRole
+              - iam:UpdateRoleDescription
+            Resource:
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/hotsock/HotsockInstallerRole
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/hotsock/HotsockSupportRole
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/hotsock/HotsockLicensingRole
           - Effect: Deny
             Action:
               - iam:CreatePolicyVersion
               - iam:DeletePolicy
               - iam:DeletePolicyVersion
               - iam:SetDefaultPolicyVersion
-            Resource: !Ref MaximumPermissionsPolicy
+              - iam:TagPolicy
+              - iam:UntagPolicy
+            Resource:
+              - !Ref MaximumPermissionsPolicy
+              - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/hotsock/HotsockIAMPermissions
   MaximumPermissionsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -271,6 +300,12 @@ Resources:
               - redshift:PurchaseReservedNodeOffering
               - savingsplans:*
             Resource: "*"
+          - Sid: DenyAssumingRolesOutsideHotsockPath
+            Effect: Deny
+            Action:
+              - sts:AssumeRole
+              - sts:AssumeRoot
+            NotResource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/hotsock/*
           - Sid: AllowPassingRoles
             Effect: Allow
             Action: iam:PassRole
@@ -300,8 +335,10 @@ Resources:
             Effect: Allow
             Action:
               - kms:CancelKeyDeletion
+              - kms:CreateAlias
               - kms:CreateGrant
               - kms:Decrypt
+              - kms:DeleteAlias
               - kms:DeriveSharedSecret
               - kms:Disable*
               - kms:Enable*
@@ -317,6 +354,7 @@ Resources:
               - kms:ScheduleKeyDeletion
               - kms:Sign
               - kms:SynchronizeMultiRegionKey
+              - kms:UpdateAlias
               - kms:UpdateKeyDescription
               - kms:UpdatePrimaryRegion
               - kms:Verify*
@@ -324,6 +362,17 @@ Resources:
             Condition:
               StringEquals:
                 aws:ResourceTag/hotsock:service: Hotsock
+          # Alias operations are authorized against the alias and against every
+          # key involved. This only covers the alias, which must be named
+          # alias/hotsock/*; the keys must still pass the tag condition in
+          # AllowKMSTaggedKeyManagement.
+          - Sid: AllowKMSAliasesForTaggedKeys
+            Effect: Allow
+            Action:
+              - kms:CreateAlias
+              - kms:DeleteAlias
+              - kms:UpdateAlias
+            Resource: !Sub arn:${AWS::Partition}:kms:*:${AWS::AccountId}:alias/hotsock/*
           - Sid: AllowKMSTaggedKeyCreation
             Effect: Allow
             Action:
@@ -347,7 +396,7 @@ Resources:
             Condition:
               StringEquals:
                 aws:ResourceTag/hotsock:service: Hotsock
-              ForAnyValue:StringNotEquals:
+              ForAllValues:StringNotEquals:
                 aws:TagKeys: [hotsock:service]
           - Sid: DenyKMSKeyTaggingInvalidTagValue
             Effect: Deny
